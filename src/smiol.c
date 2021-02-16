@@ -34,9 +34,10 @@ int build_start_count(struct SMIOL_file *file, const char *varname,
  * (a Fortran integer) rather than MPI_Comm.
  *
  ********************************************************************************/
-int SMIOL_fortran_init(MPI_Fint comm, struct SMIOL_context **context)
+int SMIOL_fortran_init(MPI_Fint comm, int num_io_tasks, int io_stride,
+                       struct SMIOL_context **context)
 {
-	return SMIOL_init(MPI_Comm_f2c(comm), context);
+	return SMIOL_init(MPI_Comm_f2c(comm), num_io_tasks, io_stride, context);
 }
 
 
@@ -47,8 +48,9 @@ int SMIOL_fortran_init(MPI_Fint comm, struct SMIOL_context **context)
  * Initialize a SMIOL context.
  *
  * Initializes a SMIOL context, within which decompositions may be defined and
- * files may be read and written. At present, the only input argument is an MPI
- * communicator.
+ * files may be read and written. The input argument comm is an MPI communicator,
+ * and the input arguments num_io_tasks and io_stride provide the total number
+ * of I/O tasks and the stride between those I/O tasks within the communicator.
  *
  * Upon successful return the context argument points to a valid SMIOL context;
  * otherwise, it is NULL and an error code other than MPI_SUCCESS is returned.
@@ -57,7 +59,8 @@ int SMIOL_fortran_init(MPI_Fint comm, struct SMIOL_context **context)
  *       that any use of the provided MPI communicator will be valid.
  *
  ********************************************************************************/
-int SMIOL_init(MPI_Comm comm, struct SMIOL_context **context)
+int SMIOL_init(MPI_Comm comm, int num_io_tasks, int io_stride,
+               struct SMIOL_context **context)
 {
 	MPI_Comm smiol_comm;
 
@@ -93,6 +96,10 @@ int SMIOL_init(MPI_Comm comm, struct SMIOL_context **context)
 	 */
 	(*context)->lib_ierr = 0;
 	(*context)->lib_type = SMIOL_LIBRARY_UNKNOWN;
+
+	(*context)->num_io_tasks = num_io_tasks;
+	(*context)->io_stride = io_stride;
+
 
 	/*
 	 * Make a duplicate of the MPI communicator for use by SMIOL
@@ -1568,9 +1575,8 @@ int SMIOL_get_frame(struct SMIOL_file *file, SMIOL_Offset *frame)
  *
  * Creates a mapping between compute elements and I/O elements.
  *
- * Given arrays of global element IDs that each task computes, the number of I/O
- * tasks, and the stride between I/O tasks, this routine works out a mapping of
- * elements between compute and I/O tasks.
+ * Given arrays of global element IDs that each task computes, this routine works
+ * out a mapping of elements between compute and I/O tasks.
  *
  * If all input arguments are determined to be valid and if the routine is
  * successful in working out a mapping, the decomp pointer is allocated and
@@ -1580,7 +1586,6 @@ int SMIOL_get_frame(struct SMIOL_file *file, SMIOL_Offset *frame)
  *******************************************************************************/
 int SMIOL_create_decomp(struct SMIOL_context *context,
                         size_t n_compute_elements, SMIOL_Offset *compute_elements,
-                        int num_io_tasks, int io_stride,
                         struct SMIOL_decomp **decomp)
 {
 	size_t i;
@@ -1639,7 +1644,8 @@ int SMIOL_create_decomp(struct SMIOL_context *context,
 	 * Determine the contiguous range of elements to be read/written by
 	 * this MPI task
 	 */
-	ierr = get_io_elements(context->comm_rank, num_io_tasks, io_stride,
+	ierr = get_io_elements(context->comm_rank,
+	                       context->num_io_tasks, context->io_stride,
 	                       n_io_elements_global, &io_start, &io_count);
 
 	/*

@@ -165,8 +165,10 @@ program smiol_runner
         write(test_log,'(a)') ''
     endif
 
+    num_io_tasks = 16
+    io_stride = 4
 
-    if (SMIOLf_init(MPI_COMM_WORLD, context) /= SMIOL_SUCCESS) then
+    if (SMIOLf_init(MPI_COMM_WORLD, num_io_tasks, io_stride, context) /= SMIOL_SUCCESS) then
         write(test_log,'(a)') "ERROR: 'SMIOLf_init' was not called successfully"
         stop 1
     endif 
@@ -180,11 +182,8 @@ program smiol_runner
     allocate(compute_elements(n_compute_elements))
     compute_elements(:) = 0
 
-    num_io_tasks = 16
-    io_stride = 4
-
     if (SMIOLf_create_decomp(context, n_compute_elements, compute_elements, &
-                             num_io_tasks, io_stride, decomp) /= SMIOL_SUCCESS) then
+                             decomp) /= SMIOL_SUCCESS) then
         write(test_log,'(a)') "Error: SMIOLf_create_decomp was not called successfully"
         stop 1
     endif
@@ -359,6 +358,8 @@ contains
         integer :: ierrcount
         type (SMIOLf_context), pointer :: context
         type (SMIOLf_context), pointer :: context_temp
+        integer :: num_io_tasks
+        integer :: io_stride
 
         write(test_log,'(a)') '********************************************************************************'
         write(test_log,'(a)') '************ SMIOLf_init / SMIOLf_finalize unit tests **************************'
@@ -366,11 +367,14 @@ contains
 
         ierrcount = 0
 
+        call MPI_Comm_size(MPI_COMM_WORLD, num_io_tasks, ierr)
+        io_stride = 1
+
         ! Invalid MPI communicator, and with an associated context that should be nullified
         write(test_log,'(a)',advance='no') 'Invalid MPI communicator (SMIOLf_init): '
         allocate(context_temp)
         context => context_temp
-        ierr = SMIOLf_init(MPI_COMM_NULL, context)
+        ierr = SMIOLf_init(MPI_COMM_NULL, num_io_tasks, io_stride, context)
         deallocate(context_temp)
         if (ierr == SMIOL_SUCCESS) then
             write(test_log,'(a)') 'FAIL - SMIOL_SUCCESS was returned, when an error was expected'
@@ -399,7 +403,7 @@ contains
         ! Everything OK for SMIOLf_init
         write(test_log,'(a)',advance='no') 'Everything OK (SMIOLf_init): '
         nullify(context)
-        ierr = SMIOLf_init(MPI_COMM_WORLD, context)
+        ierr = SMIOLf_init(MPI_COMM_WORLD, num_io_tasks, io_stride, context)
         if (ierr == SMIOL_SUCCESS .and. associated(context)) then
             write(test_log,'(a)') 'PASS'
         else if (ierr == SMIOL_SUCCESS .and. .not. associated(context)) then    ! May not be possible at present...
@@ -442,6 +446,9 @@ contains
         integer :: ierrcount
         type (SMIOLf_context), pointer :: context
         type (SMIOLf_file), pointer :: file
+        integer :: num_io_tasks
+        integer :: io_stride
+
 
         write(test_log,'(a)') '********************************************************************************'
         write(test_log,'(a)') '************ SMIOL_open_file / SMIOL_close_file unit tests *********************'
@@ -449,10 +456,12 @@ contains
 
         ierrcount = 0
 
+        call MPI_Comm_size(MPI_COMM_WORLD, num_io_tasks, ierr)
+        io_stride = 1
 
         ! Create a SMIOL context for testing file open/close routines
         nullify(context)
-        ierr = SMIOLf_init(MPI_COMM_WORLD, context)
+        ierr = SMIOLf_init(MPI_COMM_WORLD, num_io_tasks, io_stride, context)
         if (ierr /= SMIOL_SUCCESS .or. .not. associated(context)) then
             ierrcount = -1
             return
@@ -627,6 +636,9 @@ contains
         type (SMIOLf_context), pointer :: context
         type (SMIOLf_decomp), pointer :: decomp => null()
         logical :: matched
+        integer :: num_io_tasks
+        integer :: io_stride
+
 
         write(test_log,'(a)') '********************************************************************************'
         write(test_log,'(a)') '************ SMIOLf_create_decomp / SMIOLf_free_decomp tests *******************'
@@ -648,9 +660,12 @@ contains
             return
         end if
 
+        num_io_tasks = comm_size
+        io_stride = 1
+
         ! Create a SMIOL context for testing decomp routines
         nullify(context)
-        ierr = SMIOLf_init(MPI_COMM_WORLD, context)
+        ierr = SMIOLf_init(MPI_COMM_WORLD, num_io_tasks, io_stride, context)
         if (ierr /= SMIOL_SUCCESS .or. .not. associated(context)) then
             ierrcount = -1
             return
@@ -660,7 +675,7 @@ contains
         write(test_log,'(a)',advance='no') 'Everything OK for SMIOLf_create_decomp with 0 elements: '
         n_compute_elements = 0
         allocate(compute_elements(n_compute_elements))
-        ierr = SMIOLf_create_decomp(context, n_compute_elements, compute_elements, comm_size, 1, decomp)
+        ierr = SMIOLf_create_decomp(context, n_compute_elements, compute_elements, decomp)
         if (ierr == SMIOL_SUCCESS .and. associated(decomp)) then
             write(test_log,'(a)') "PASS"
         else
@@ -688,7 +703,7 @@ contains
         n_compute_elements = 1
         allocate(compute_elements(n_compute_elements))
         compute_elements(:) = 0
-        ierr = SMIOLf_create_decomp(context, n_compute_elements, compute_elements, comm_size, 1, decomp)
+        ierr = SMIOLf_create_decomp(context, n_compute_elements, compute_elements, decomp)
         if (ierr == SMIOL_SUCCESS .and. associated(decomp)) then
             write(test_log,'(a)') "PASS"
         else
@@ -716,7 +731,7 @@ contains
         n_compute_elements = 1000000
         allocate(compute_elements(n_compute_elements))
         compute_elements(:) = 0
-        ierr = SMIOLf_create_decomp(context, n_compute_elements, compute_elements, comm_size, 1, decomp)
+        ierr = SMIOLf_create_decomp(context, n_compute_elements, compute_elements, decomp)
         if (ierr == SMIOL_SUCCESS .and. associated(decomp)) then
             write(test_log,'(a)') "PASS"
         else
@@ -752,12 +767,27 @@ contains
             ierrcount = ierrcount + 1
         endif
 
+        ! Free the SMIOL context
+        ierr = SMIOLf_finalize(context)
+        if (ierr /= SMIOL_SUCCESS .or. associated(context)) then
+            ierrcount = -1
+            return
+        end if
+
         !
         ! The following tests will only be run if there are exactly two MPI tasks.
         ! In principle, as long as there are at least two MPI ranks in MPI_COMM_WORLD,
         ! an intracommunicator with exactly two ranks could be created for these tests.
         !
         if (comm_size == 2) then
+
+            ! Create a SMIOL context for testing decomp routines
+            nullify(context)
+            ierr = SMIOLf_init(MPI_COMM_WORLD, 2, 1, context)
+            if (ierr /= SMIOL_SUCCESS .or. .not. associated(context)) then
+                ierrcount = -1
+                return
+            end if
 
             ! Odd/even compute, half/half I/O
             write(test_log,'(a)',advance='no') 'Odd/even compute, half/half I/O: '
@@ -774,7 +804,7 @@ contains
                 end do
             end if
 
-            ierr = SMIOLf_create_decomp(context, n_compute_elements, compute_elements, 2, 1, decomp)
+            ierr = SMIOLf_create_decomp(context, n_compute_elements, compute_elements, decomp)
             if (ierr == SMIOL_SUCCESS .and. associated(decomp)) then
 
                 ! The correct comp_list and io_list arrays, below, were verified manually
@@ -807,6 +837,21 @@ contains
                 ierrcount = ierrcount + 1
             end if
 
+            ! Free the SMIOL context
+            ierr = SMIOLf_finalize(context)
+            if (ierr /= SMIOL_SUCCESS .or. associated(context)) then
+                ierrcount = -1
+                return
+            end if
+
+
+            ! Create a SMIOL context for testing decomp routines
+            nullify(context)
+            ierr = SMIOLf_init(MPI_COMM_WORLD, 1, 2, context)
+            if (ierr /= SMIOL_SUCCESS .or. .not. associated(context)) then
+                ierrcount = -1
+                return
+            end if
 
             ! Even/odd compute, all/nothing I/O
             write(test_log,'(a)',advance='no') 'Even/odd compute, all/nothing I/O: '
@@ -823,7 +868,7 @@ contains
                 end do
             end if
 
-            ierr = SMIOLf_create_decomp(context, n_compute_elements, compute_elements, 1, 2, decomp)
+            ierr = SMIOLf_create_decomp(context, n_compute_elements, compute_elements, decomp)
             if (ierr == SMIOL_SUCCESS .and. associated(decomp)) then
 
                 ! The correct comp_list and io_list arrays, below, were verified manually
@@ -856,6 +901,21 @@ contains
                 ierrcount = ierrcount + 1
             end if
 
+            ! Free the SMIOL context
+            ierr = SMIOLf_finalize(context)
+            if (ierr /= SMIOL_SUCCESS .or. associated(context)) then
+                ierrcount = -1
+                return
+            end if
+
+
+            ! Create a SMIOL context for testing decomp routines
+            nullify(context)
+            ierr = SMIOLf_init(MPI_COMM_WORLD, 1, 2, context)
+            if (ierr /= SMIOL_SUCCESS .or. .not. associated(context)) then
+                ierrcount = -1
+                return
+            end if
 
             ! Nothing/all compute, all/nothing I/O
             write(test_log,'(a)',advance='no') 'Nothing/all compute, all/nothing I/O: '
@@ -874,7 +934,7 @@ contains
                 end do
             end if
 
-            ierr = SMIOLf_create_decomp(context, n_compute_elements, compute_elements, 1, 2, decomp)
+            ierr = SMIOLf_create_decomp(context, n_compute_elements, compute_elements, decomp)
             if (ierr == SMIOL_SUCCESS .and. associated(decomp)) then
 
                 ! The correct comp_list and io_list arrays, below, were verified manually
@@ -906,15 +966,15 @@ contains
                 write(test_log,'(a)') 'After previous unit test, SMIOL_free_decomp was unsuccessful: FAIL'
                 ierrcount = ierrcount + 1
             end if
+
+            ! Free the SMIOL context
+            ierr = SMIOLf_finalize(context)
+            if (ierr /= SMIOL_SUCCESS .or. associated(context)) then
+                ierrcount = -1
+                return
+            end if
         else
             write(test_log, '(a)') '<<< Tests that require exactly 2 MPI tasks will not be run >>>'
-        end if
-
-        ! Free the SMIOL context
-        ierr = SMIOLf_finalize(context)
-        if (ierr /= SMIOL_SUCCESS .or. associated(context)) then
-            ierrcount = -1
-            return
         end if
 
         write(test_log,'(a)') ''
@@ -935,6 +995,8 @@ contains
         integer(kind=SMIOL_offset_kind) :: dimsize
         integer(kind=SMIOL_offset_kind) :: expected_dimsize
         logical :: is_unlimited
+        integer :: num_io_tasks
+        integer :: io_stride
 
         write(test_log,'(a)') '********************************************************************************'
         write(test_log,'(a)') '************ SMIOL_define_dim / SMIOL_inquire_dim unit tests *******************'
@@ -943,9 +1005,12 @@ contains
         ierrcount = 0
 
 
+        call MPI_Comm_size(MPI_COMM_WORLD, num_io_tasks, ierr)
+        io_stride = 1
+
         ! Create a SMIOL context for testing file dimension routines
         nullify(context)
-        ierr = SMIOLf_init(MPI_COMM_WORLD, context)
+        ierr = SMIOLf_init(MPI_COMM_WORLD, num_io_tasks, io_stride, context)
         if (ierr /= SMIOL_SUCCESS .or. .not. associated(context)) then
             write(test_log,'(a)') 'Failed to create SMIOL context...'
             ierrcount = -1
@@ -1262,6 +1327,8 @@ contains
         integer :: ndims_out
         integer :: vartype_out
 #endif
+        integer :: num_io_tasks
+        integer :: io_stride
 
         write(test_log,'(a)') '********************************************************************************'
         write(test_log,'(a)') '************ SMIOL_define_var / SMIOL_inquire_var unit tests *******************'
@@ -1270,9 +1337,12 @@ contains
         ierrcount = 0
 
 
+        call MPI_Comm_size(MPI_COMM_WORLD, num_io_tasks, ierr)
+        io_stride = 1
+
         ! Create a SMIOL context for testing file variable routines
         nullify(context)
-        ierr = SMIOLf_init(MPI_COMM_WORLD, context)
+        ierr = SMIOLf_init(MPI_COMM_WORLD, num_io_tasks, io_stride, context)
         if (ierr /= SMIOL_SUCCESS .or. .not. associated(context)) then
             write(test_log,'(a)') 'Failed to create a context...'
             ierrcount = -1
@@ -1702,6 +1772,8 @@ contains
         real(kind=R8KIND) :: real64_att
         integer :: int32_att
         character(len=32) :: text_att
+        integer :: num_io_tasks
+        integer :: io_stride
 
 
         write(test_log,'(a)') '********************************************************************************'
@@ -1710,10 +1782,12 @@ contains
 
         ierrcount = 0
 
+        call MPI_Comm_size(MPI_COMM_WORLD, num_io_tasks, ierr)
+        io_stride = 1
 
         ! Create a SMIOL context for testing attribute routines
         nullify(context)
-        ierr = SMIOLf_init(MPI_COMM_WORLD, context)
+        ierr = SMIOLf_init(MPI_COMM_WORLD, num_io_tasks, io_stride, context)
         if (ierr /= SMIOL_SUCCESS .or. .not. associated(context)) then
             write(test_log,'(a)') 'Failed to create a context...'
             ierrcount = -1
@@ -2105,6 +2179,8 @@ contains
         integer :: ierrcount
         type (SMIOLf_context), pointer :: context => null()
         type (SMIOLf_file), pointer :: file => null()
+        integer :: num_io_tasks
+        integer :: io_stride
 
         write(test_log,'(a)') '********************************************************************************'
         write(test_log,'(a)') '************************* SMIOLf_sync_file tests *******************************'
@@ -2112,8 +2188,11 @@ contains
 
         ierrcount = 0
 
+        call MPI_Comm_size(MPI_COMM_WORLD, num_io_tasks, ierr)
+        io_stride = 1
+
         ! Create a SMIOL context for testing SMIOL_sync_file
-        ierr = SMIOLf_init(MPI_COMM_WORLD, context)
+        ierr = SMIOLf_init(MPI_COMM_WORLD, num_io_tasks, io_stride, context)
         if (ierr /= SMIOL_SUCCESS .or. .not. associated(context)) then
             write(test_log,'(a)') 'Failed to initalize a SMIOL context'
             ierrcount = -1
@@ -2269,6 +2348,8 @@ contains
         integer (kind=SMIOL_offset_kind) :: frame
         type (SMIOLf_context), pointer :: context => null()
         type (SMIOLf_file), pointer :: file => null()
+        integer :: num_io_tasks
+        integer :: io_stride
 
         write(test_log,'(a)') '********************************************************************************'
         write(test_log,'(a)') '************************ SMIOLf_set/get_frame tests ****************************'
@@ -2277,8 +2358,11 @@ contains
         ierrcount = 0
         frame = -1
 
+        call MPI_Comm_size(MPI_COMM_WORLD, num_io_tasks, ierr)
+        io_stride = 1
+
         ! Create a SMIOL context for testing SMIOL__file
-        ierr = SMIOLf_init(MPI_COMM_WORLD, context)
+        ierr = SMIOLf_init(MPI_COMM_WORLD, num_io_tasks, io_stride, context)
         if (ierr /= SMIOL_SUCCESS .or. .not. associated(context)) then
             write(test_log,'(a)') 'Failed to initalize a SMIOL context'
             ierrcount = -1
@@ -2413,7 +2497,7 @@ contains
         fail = 0
 
         ! Create a SMIOL context for testing SMIOL_sync_file
-        ierr = SMIOLf_init(MPI_COMM_WORLD, context)
+        ierr = SMIOLf_init(MPI_COMM_WORLD, 1, 2, context)
         if (ierr /= SMIOL_SUCCESS .or. .not. associated(context)) then
             write(test_log,'(a)') 'Failed to initalize a SMIOL context'
             ierrcount = -1
@@ -2544,7 +2628,7 @@ contains
                 endif
             enddo
 
-            if (SMIOLf_create_decomp(context, n_compute_elements, compute_elements, 1, 2, decomp) /= SMIOL_SUCCESS) then
+            if (SMIOLf_create_decomp(context, n_compute_elements, compute_elements, decomp) /= SMIOL_SUCCESS) then
                 write(test_log,'(a)') "FAIL: SMIOLf_create_decomp was not called successfully"
                 ierrcount = -1
                 return

@@ -286,8 +286,10 @@ int main(int argc, char **argv)
 	}
 
 
+	num_io_tasks = 16;
+	io_stride = 4;
 
-	if ((ierr = SMIOL_init(MPI_COMM_WORLD, &context)) != SMIOL_SUCCESS) {
+	if ((ierr = SMIOL_init(MPI_COMM_WORLD, num_io_tasks, io_stride, &context)) != SMIOL_SUCCESS) {
 		fprintf(test_log, "ERROR: SMIOL_init: %s ", SMIOL_error_string(ierr));
 		return 1;
 	} 
@@ -303,11 +305,8 @@ int main(int argc, char **argv)
 
 	memset((void *)compute_elements, 0, sizeof(SMIOL_Offset) * n_compute_elements);
 
-	num_io_tasks = 16;
-	io_stride = 4;
-
 	ierr = SMIOL_create_decomp(context, n_compute_elements, compute_elements,
-	                           num_io_tasks, io_stride, &decomp);
+	                           &decomp);
 	if (ierr != SMIOL_SUCCESS) {
 		printf("ERROR: SMIOL_create_decomp - SMIOL_SUCCESS was not returned\n");
 		return 1;
@@ -486,6 +485,8 @@ int test_init_finalize(FILE *test_log)
 	int ierr;
 	int errcount;
 	struct SMIOL_context *context;
+	int num_io_tasks;
+	int io_stride;
 
 	fprintf(test_log, "********************************************************************************\n");
 	fprintf(test_log, "************ SMIOL_init / SMIOL_finalize unit tests ****************************\n");
@@ -493,9 +494,12 @@ int test_init_finalize(FILE *test_log)
 
 	errcount = 0;
 
+	MPI_Comm_size(MPI_COMM_WORLD, &num_io_tasks);
+	io_stride = 1;
+
 	/* Null context pointer */
 	fprintf(test_log, "Null pointer to context pointer (SMIOL_init): ");
-	ierr = SMIOL_init(MPI_COMM_WORLD, NULL);
+	ierr = SMIOL_init(MPI_COMM_WORLD, num_io_tasks, io_stride, NULL);
 	if (ierr == SMIOL_SUCCESS) {
 		fprintf(test_log, "FAIL - SMIOL_SUCCESS was returned, when an error was expected\n");
 		errcount++;
@@ -507,7 +511,7 @@ int test_init_finalize(FILE *test_log)
 	/* Invalid MPI communicator, and with a non-NULL context that should be NULL on return */
 	fprintf(test_log, "Invalid MPI communicator (SMIOL_init): ");
 	context = (struct SMIOL_context *)NULL + 42;   /* Any non-NULL value should be fine... */
-	ierr = SMIOL_init(MPI_COMM_NULL, &context);
+	ierr = SMIOL_init(MPI_COMM_NULL, num_io_tasks, io_stride, &context);
 	if (ierr == SMIOL_SUCCESS) {
 		fprintf(test_log, "FAIL - SMIOL_SUCCESS was returned, when an error was expected\n");
 		errcount++;
@@ -550,7 +554,7 @@ int test_init_finalize(FILE *test_log)
 	/* Everything OK for SMIOL_init */
 	fprintf(test_log, "Everything OK (SMIOL_init): ");
 	context = NULL;
-	ierr = SMIOL_init(MPI_COMM_WORLD, &context);
+	ierr = SMIOL_init(MPI_COMM_WORLD, num_io_tasks, io_stride, &context);
 	if (ierr == SMIOL_SUCCESS && context != NULL) {
 		fprintf(test_log, "PASS\n");
 	}
@@ -596,6 +600,8 @@ int test_open_close(FILE *test_log)
 	int errcount;
 	struct SMIOL_context *context;
 	struct SMIOL_file *file;
+	int num_io_tasks;
+	int io_stride;
 
 	fprintf(test_log, "********************************************************************************\n");
 	fprintf(test_log, "************ SMIOL_open_file / SMIOL_close_file unit tests *********************\n");
@@ -603,8 +609,11 @@ int test_open_close(FILE *test_log)
 
 	errcount = 0;
 
+	MPI_Comm_size(MPI_COMM_WORLD, &num_io_tasks);
+	io_stride = 1;
+
 	/* Create a SMIOL context for testing file open/close routines */
-	ierr = SMIOL_init(MPI_COMM_WORLD, &context);
+	ierr = SMIOL_init(MPI_COMM_WORLD, num_io_tasks, io_stride, &context);
 	if (ierr != SMIOL_SUCCESS || context == NULL) {
 		fprintf(test_log, "Failed to create SMIOL context...\n");
 		return -1;
@@ -780,6 +789,8 @@ int test_decomp(FILE *test_log)
 	SMIOL_Offset *compute_elements = NULL;
 	struct SMIOL_context *context = NULL;
 	struct SMIOL_decomp *decomp = NULL;
+	int num_io_tasks;
+	int io_stride;
 
 	fprintf(test_log, "********************************************************************************\n");
 	fprintf(test_log, "************ SMIOL_create_decomp / SMIOL_free_decomp unit tests ****************\n");
@@ -797,8 +808,11 @@ int test_decomp(FILE *test_log)
 		return -1;
 	}
 
+	num_io_tasks = comm_size;
+	io_stride = 1;
+
 	/* Create a SMIOL context for testing decomp routines */
-	ierr = SMIOL_init(MPI_COMM_WORLD, &context);
+	ierr = SMIOL_init(MPI_COMM_WORLD, num_io_tasks, io_stride, &context);
 	if (ierr != SMIOL_SUCCESS || context == NULL) {
 		fprintf(test_log, "Failed to create SMIOL context...\n");
 		return -1;
@@ -807,7 +821,7 @@ int test_decomp(FILE *test_log)
 	/* Test create decomp with compute_elements == NULL and n_compute != 0 */
 	fprintf(test_log, "Testing SMIOL_create_decomp with NULL elements and n_elements != 0: ");
 	n_compute_elements = 1;
-	ierr = SMIOL_create_decomp(context, n_compute_elements, compute_elements, comm_size, 1, &decomp);
+	ierr = SMIOL_create_decomp(context, n_compute_elements, compute_elements, &decomp);
 	if (ierr == SMIOL_INVALID_ARGUMENT && decomp == NULL) {
 		fprintf(test_log, "PASS\n");
 	} else {
@@ -832,7 +846,7 @@ int test_decomp(FILE *test_log)
 	fprintf(test_log, "Everything OK (SMIOL_create_decomp) with 0 elements: ");
 	n_compute_elements = 0;
 	compute_elements = malloc(sizeof(SMIOL_Offset) * n_compute_elements);
-	ierr = SMIOL_create_decomp(context, n_compute_elements, compute_elements, comm_size, 1, &decomp);
+	ierr = SMIOL_create_decomp(context, n_compute_elements, compute_elements, &decomp);
 	if (ierr == SMIOL_SUCCESS && decomp != NULL) {
 		fprintf(test_log, "PASS\n");
 	} else {
@@ -864,7 +878,7 @@ int test_decomp(FILE *test_log)
 	n_compute_elements = 1;
 	compute_elements = malloc(sizeof(SMIOL_Offset) * n_compute_elements);
 	memset((void *)compute_elements, 0, sizeof(SMIOL_Offset) * n_compute_elements);
-	ierr = SMIOL_create_decomp(context, n_compute_elements, compute_elements, comm_size, 1, &decomp);
+	ierr = SMIOL_create_decomp(context, n_compute_elements, compute_elements, &decomp);
 	if (ierr == SMIOL_SUCCESS && decomp != NULL) {
 		fprintf(test_log, "PASS\n");
 	} else {
@@ -895,7 +909,7 @@ int test_decomp(FILE *test_log)
 	n_compute_elements = 1000000;
 	compute_elements = malloc(sizeof(SMIOL_Offset) * n_compute_elements);
 	memset((void *)compute_elements, 0, sizeof(SMIOL_Offset) * n_compute_elements);
-	ierr = SMIOL_create_decomp(context, n_compute_elements, compute_elements, comm_size, 1, &decomp);
+	ierr = SMIOL_create_decomp(context, n_compute_elements, compute_elements, &decomp);
 	if (ierr == SMIOL_SUCCESS && decomp != NULL) {
 		fprintf(test_log, "PASS\n");
 	} else {
@@ -934,12 +948,26 @@ int test_decomp(FILE *test_log)
 		errcount++;
 	}
 
+	/* Free the SMIOL context */
+	ierr = SMIOL_finalize(&context);
+	if (ierr != SMIOL_SUCCESS || context != NULL) {
+		fprintf(test_log, "Failed to free SMIOL context...\n");
+		return -1;
+	}
+
 	/*
 	 * The following tests will only be run if there are exactly two MPI tasks.
 	 * In principle, as long as there are at least two MPI ranks in MPI_COMM_WORLD,
 	 * an intracommunicator with exactly two ranks could be created for these tests.
 	 */
 	if (comm_size == 2) {
+
+		/* Create a SMIOL context for testing decomp routines */
+		ierr = SMIOL_init(MPI_COMM_WORLD, 2, 1, &context);
+		if (ierr != SMIOL_SUCCESS || context == NULL) {
+			fprintf(test_log, "Failed to create SMIOL context...\n");
+			return -1;
+		}
 
 		/* Odd/even compute, half/half I/O */
 		fprintf(test_log, "Odd/even compute, half/half I/O: ");
@@ -955,7 +983,7 @@ int test_decomp(FILE *test_log)
 				compute_elements[i] = (SMIOL_Offset)(2 * i);        /* Even elements */
 			}
 		}
-		ierr = SMIOL_create_decomp(context, n_compute_elements, compute_elements, 2, 1, &decomp);
+		ierr = SMIOL_create_decomp(context, n_compute_elements, compute_elements, &decomp);
 		if (ierr == SMIOL_SUCCESS && decomp != NULL) {
 
 			/* The correct comp_list and io_list arrays, below, were verified manually */
@@ -990,6 +1018,20 @@ int test_decomp(FILE *test_log)
 			errcount++;
 		}
 
+		/* Free the SMIOL context */
+		ierr = SMIOL_finalize(&context);
+		if (ierr != SMIOL_SUCCESS || context != NULL) {
+			fprintf(test_log, "Failed to free SMIOL context...\n");
+			return -1;
+		}
+
+
+		/* Create a SMIOL context for testing decomp routines */
+		ierr = SMIOL_init(MPI_COMM_WORLD, 1, 2, &context);
+		if (ierr != SMIOL_SUCCESS || context == NULL) {
+			fprintf(test_log, "Failed to create SMIOL context...\n");
+			return -1;
+		}
 
 		/* Even/odd compute, all/nothing I/O */
 		fprintf(test_log, "Even/odd compute, all/nothing I/O: ");
@@ -1005,7 +1047,7 @@ int test_decomp(FILE *test_log)
 				compute_elements[i] = (SMIOL_Offset)(2 * i + 1);    /* Odd elements */
 			}
 		}
-		ierr = SMIOL_create_decomp(context, n_compute_elements, compute_elements, 1, 2, &decomp);
+		ierr = SMIOL_create_decomp(context, n_compute_elements, compute_elements, &decomp);
 		if (ierr == SMIOL_SUCCESS && decomp != NULL) {
 
 			/* The correct comp_list and io_list arrays, below, were verified manually */
@@ -1040,6 +1082,20 @@ int test_decomp(FILE *test_log)
 			errcount++;
 		}
 
+		/* Free the SMIOL context */
+		ierr = SMIOL_finalize(&context);
+		if (ierr != SMIOL_SUCCESS || context != NULL) {
+			fprintf(test_log, "Failed to free SMIOL context...\n");
+			return -1;
+		}
+
+
+		/* Create a SMIOL context for testing decomp routines */
+		ierr = SMIOL_init(MPI_COMM_WORLD, 1, 2, &context);
+		if (ierr != SMIOL_SUCCESS || context == NULL) {
+			fprintf(test_log, "Failed to create SMIOL context...\n");
+			return -1;
+		}
 
 		/* Nothing/all compute, all/nothing I/O */
 		fprintf(test_log, "Nothing/all compute, all/nothing I/O: ");
@@ -1057,7 +1113,7 @@ int test_decomp(FILE *test_log)
 				compute_elements[i] = (SMIOL_Offset)(n_compute_elements - 1 - i);    /* All compute elements */
 			}
 		}
-		ierr = SMIOL_create_decomp(context, n_compute_elements, compute_elements, 1, 2, &decomp);
+		ierr = SMIOL_create_decomp(context, n_compute_elements, compute_elements, &decomp);
 		if (ierr == SMIOL_SUCCESS && decomp != NULL) {
 
 			/* The correct comp_list and io_list arrays, below, were verified manually */
@@ -1092,15 +1148,15 @@ int test_decomp(FILE *test_log)
 			errcount++;
 		}
 
+		/* Free the SMIOL context */
+		ierr = SMIOL_finalize(&context);
+		if (ierr != SMIOL_SUCCESS || context != NULL) {
+			fprintf(test_log, "Failed to free SMIOL context...\n");
+			return -1;
+		}
+
 	} else {
 		fprintf(test_log, "<<< Tests that require exactly 2 MPI tasks will not be run >>>\n");
-	}
-
-	/* Free the SMIOL context */
-	ierr = SMIOL_finalize(&context);
-	if (ierr != SMIOL_SUCCESS || context != NULL) {
-		fprintf(test_log, "Failed to free SMIOL context...\n");
-		return -1;
 	}
 
 	fflush(test_log);
@@ -1122,6 +1178,8 @@ int test_build_exch(FILE *test_log)
 	SMIOL_Offset *compute_elements = NULL, *io_elements = NULL;
 	struct SMIOL_context *context = NULL;
 	struct SMIOL_decomp *decomp = NULL;
+	int num_io_tasks;
+	int io_stride;
 
 	fprintf(test_log, "********************************************************************************\n");
 	fprintf(test_log, "************************* build_exchange unit tests ****************************\n");
@@ -1139,8 +1197,11 @@ int test_build_exch(FILE *test_log)
 		return -1;
 	}
 
+	num_io_tasks = comm_size;
+	io_stride = 1;
+
 	/* Create a SMIOL context for testing decomp routines */
-	ierr = SMIOL_init(MPI_COMM_WORLD, &context);
+	ierr = SMIOL_init(MPI_COMM_WORLD, num_io_tasks, io_stride, &context);
 	if (ierr != SMIOL_SUCCESS || context == NULL) {
 		fprintf(test_log, "Failed to create SMIOL context...\n");
 		return -1;
@@ -1508,6 +1569,8 @@ int test_transfer(FILE *test_log)
 	SMIOL_Offset *compute_elements = NULL, *io_elements = NULL;
 	struct SMIOL_context *context = NULL;
 	struct SMIOL_decomp *decomp = NULL;
+	int num_io_tasks;
+	int io_stride;
 
 	/* Pointers to transfer tests for various element types */
 	int (*testfun[4])(size_t,size_t,struct SMIOL_decomp *) = {
@@ -1539,8 +1602,11 @@ int test_transfer(FILE *test_log)
 		return -1;
 	}
 
+	num_io_tasks = comm_size;
+	io_stride = 1;
+
 	/* Create a SMIOL context for testing decomp routines */
-	ierr = SMIOL_init(MPI_COMM_WORLD, &context);
+	ierr = SMIOL_init(MPI_COMM_WORLD, num_io_tasks, io_stride, &context);
 	if (ierr != SMIOL_SUCCESS || context == NULL) {
 		fprintf(test_log, "Failed to create SMIOL context...\n");
 		return -1;
@@ -1752,6 +1818,8 @@ int test_dimensions(FILE *test_log)
 	struct SMIOL_context *context;
 	struct SMIOL_file *file;
 	SMIOL_Offset expected_dimsize;
+	int num_io_tasks;
+	int io_stride;
 
 	fprintf(test_log, "********************************************************************************\n");
 	fprintf(test_log, "************ SMIOL_define_dim / SMIOL_inquire_dim ******************************\n");
@@ -1759,9 +1827,12 @@ int test_dimensions(FILE *test_log)
 
 	errcount = 0;
 
+	MPI_Comm_size(MPI_COMM_WORLD, &num_io_tasks);
+	io_stride = 1;
+
 	/* Create a SMIOL context for testing dimension routines */
 	context = NULL;
-	ierr = SMIOL_init(MPI_COMM_WORLD, &context);
+	ierr = SMIOL_init(MPI_COMM_WORLD, num_io_tasks, io_stride, &context);
 	if (ierr != SMIOL_SUCCESS || context == NULL) {
 		fprintf(test_log, "Failed to create SMIOL context...\n");
 		return -1;
@@ -2101,6 +2172,8 @@ int test_variables(FILE *test_log)
 	char **dimnames;
 	int ndims;
 	int vartype;
+	int num_io_tasks;
+	int io_stride;
 
 	fprintf(test_log, "********************************************************************************\n");
 	fprintf(test_log, "************ SMIOL_define_var / SMIOL_inquire_var ******************************\n");
@@ -2108,9 +2181,12 @@ int test_variables(FILE *test_log)
 
 	errcount = 0;
 
+	MPI_Comm_size(MPI_COMM_WORLD, &num_io_tasks);
+	io_stride = 1;
+
 	/* Create a SMIOL context for testing variable routines */
 	context = NULL;
-	ierr = SMIOL_init(MPI_COMM_WORLD, &context);
+	ierr = SMIOL_init(MPI_COMM_WORLD, num_io_tasks, io_stride, &context);
 	if (ierr != SMIOL_SUCCESS || context == NULL) {
 		fprintf(test_log, "Failed to create SMIOL context...\n");
 		return -1;
@@ -2582,6 +2658,8 @@ int test_attributes(FILE *test_log)
 	double real64_att;
 	int int32_att;
 	char text_att[32];
+	int num_io_tasks;
+	int io_stride;
 
 
 	fprintf(test_log, "********************************************************************************\n");
@@ -2590,9 +2668,12 @@ int test_attributes(FILE *test_log)
 
 	errcount = 0;
 
+	MPI_Comm_size(MPI_COMM_WORLD, &num_io_tasks);
+	io_stride = 1;
+
 	/* Create a SMIOL context for testing attribute routines */
 	context = NULL;
-	ierr = SMIOL_init(MPI_COMM_WORLD, &context);
+	ierr = SMIOL_init(MPI_COMM_WORLD, num_io_tasks, io_stride, &context);
 	if (ierr != SMIOL_SUCCESS || context == NULL) {
 		fprintf(test_log, "Failed to create SMIOL context...\n");
 		return -1;
@@ -3033,6 +3114,9 @@ int test_file_sync(FILE *test_log)
 	int errcount;
 	struct SMIOL_context *context = NULL;
 	struct SMIOL_file *file = NULL;
+	int num_io_tasks;
+	int io_stride;
+
 
 	fprintf(test_log, "********************************************************************************\n");
 	fprintf(test_log, "************************ SMIOL_sync_file unit tests ****************************\n");
@@ -3040,9 +3124,11 @@ int test_file_sync(FILE *test_log)
 
 	errcount = 0;
 
+	MPI_Comm_size(MPI_COMM_WORLD, &num_io_tasks);
+	io_stride = 1;
 
 	/* Create a SMIOL context for testing file sync routines */
-	ierr = SMIOL_init(MPI_COMM_WORLD, &context);
+	ierr = SMIOL_init(MPI_COMM_WORLD, num_io_tasks, io_stride, &context);
 	if (ierr != SMIOL_SUCCESS || context == NULL) {
 		fprintf(test_log, "Failed to create SMIOL context...\n");
 		return -1;
@@ -3718,6 +3804,9 @@ int test_set_get_frame(FILE* test_log)
 	struct SMIOL_context *context;
 	struct SMIOL_file *file;
 	SMIOL_Offset frame;
+	int num_io_tasks;
+	int io_stride;
+
 
 	fprintf(test_log, "********************************************************************************\n");
 	fprintf(test_log, "************************** SMIOL_set/get_frame tests ***************************\n");
@@ -3725,9 +3814,12 @@ int test_set_get_frame(FILE* test_log)
 
 	errcount = 0;
 
+	MPI_Comm_size(MPI_COMM_WORLD, &num_io_tasks);
+	io_stride = 1;
+
 	/* Create a SMIOL context for testing variable routines */
 	context = NULL;
-	ierr = SMIOL_init(MPI_COMM_WORLD, &context);
+	ierr = SMIOL_init(MPI_COMM_WORLD, num_io_tasks, io_stride, &context);
 	if (ierr != SMIOL_SUCCESS || context == NULL) {
 		fprintf(test_log, "Failed to create SMIOL context...\n");
 		return -1;
@@ -3906,9 +3998,13 @@ int test_put_get_vars(FILE *test_log)
 	nTasks = comm_size;
 	nVertLevels = 10;
 
+	num_io_tasks = comm_size / 2;
+	num_io_tasks = (num_io_tasks <= 0) ? 1 : num_io_tasks;  /* Always use at least one I/O task */
+	io_stride = 2;
+
 	/* Create a SMIOL context */
 	context = NULL;
-	ierr = SMIOL_init(MPI_COMM_WORLD, &context);
+	ierr = SMIOL_init(MPI_COMM_WORLD, num_io_tasks, io_stride, &context);
 	if (ierr != SMIOL_SUCCESS || context == NULL) {
 		fprintf(test_log, "Failed to create SMIOL context...\n");
 		return -1;
@@ -3916,9 +4012,6 @@ int test_put_get_vars(FILE *test_log)
 
 	if (valid_comm_size) {
 		/* Create a decomp for testing parallel I/O */
-		num_io_tasks = comm_size / 2;
-		num_io_tasks = (num_io_tasks <= 0) ? 1 : num_io_tasks;  /* Always use at least one I/O task */
-		io_stride = 2;
 		n_compute_elements = (size_t)(nCells / comm_size);
 		compute_elements = malloc(sizeof(SMIOL_Offset) * n_compute_elements);
 		for (i = 0; i < n_compute_elements; i++) {
@@ -3926,7 +4019,7 @@ int test_put_get_vars(FILE *test_log)
 		}
 		ierr = SMIOL_create_decomp(context,
 		                           n_compute_elements, compute_elements,
-		                           num_io_tasks, io_stride, &decomp);
+		                           &decomp);
 		if (ierr != SMIOL_SUCCESS) {
 			fprintf(test_log, "Failed to create decomp...\n");
 			return -1;
@@ -3942,7 +4035,7 @@ int test_put_get_vars(FILE *test_log)
 	compute_element = comm_rank;
 	ierr = SMIOL_create_decomp(context,
 	                           1, &compute_element,
-	                           comm_size, 1, &decomp2);
+	                           &decomp2);
 	if (ierr != SMIOL_SUCCESS) {
 		fprintf(test_log, "Failed to create decomp2...\n");
 		return -1;
@@ -4304,9 +4397,6 @@ int test_put_get_vars(FILE *test_log)
 
 	if (valid_comm_size) {
 		/* Create a decomp for testing parallel I/O */
-		num_io_tasks = comm_size / 2;
-		num_io_tasks = (num_io_tasks <= 0) ? 1 : num_io_tasks;  /* Always use at least one I/O task */
-		io_stride = 2;
 		n_compute_elements = (size_t)(nCells / comm_size);
 		compute_elements = malloc(sizeof(SMIOL_Offset) * n_compute_elements);
 		for (i = 0; i < n_compute_elements; i++) {
@@ -4314,7 +4404,7 @@ int test_put_get_vars(FILE *test_log)
 		}
 		ierr = SMIOL_create_decomp(context,
 		                           n_compute_elements, compute_elements,
-		                           num_io_tasks, io_stride, &decomp);
+		                           &decomp);
 		if (ierr != SMIOL_SUCCESS) {
 			fprintf(test_log, "Failed to create decomp...\n");
 			return -1;
